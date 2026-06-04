@@ -1,0 +1,57 @@
+.dashboard {
+    background: #111827;
+    color: #e9ecef;
+    border-radius: 0.9rem;
+}
+
+.bg-dark-subtle-panel {
+    background: #1f2937;
+    color: #e5e7eb;
+    border-radius: 0.85rem;
+}
+
+.card {
+    border-radius: 0.85rem;
+}
+
+.form-control,
+.form-control:focus {
+    background: #111827;
+    border-color: #374151;
+    color: #f9fafb;
+}
+
+.form-control::placeholder {
+    color: #9ca3af;
+}
+
+.table th {
+    white-space: nowrap;
+}
+
+.table td {
+    vertical-align: middle;
+    color: #e5e7eb;
+}
+
+.cctv-section {
+    background: #0f2133;
+    border-radius: 0.85rem;
+}
+
+.verified-cctv-section {
+    background: #12324d;
+}
+
+.cctv-device-card {
+    background: #eaf4ff;
+    color: #0f172a;
+}
+
+.cctv-device-card .text-secondary {
+    color: #334155 !important;
+}
+
+.deep-scan-btn {
+    min-width: 240px;
+}

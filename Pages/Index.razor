@@ -1,0 +1,258 @@
+@page "/"
+@using NetScannerPro.Models
+@using NetScannerPro.Services
+@inject INetworkScannerService ScannerService
+
+<PageTitle>MikroTik Device Dashboard</PageTitle>
+
+<div class="container-fluid py-4 dashboard">
+    <div class="mb-4">
+        <h2 class="mb-1">MikroTik Device Scanner</h2>
+        <p class="text-secondary mb-0">Connect to RouterOS API and load ARP + DHCP lease data.</p>
+    </div>
+
+    <div class="card shadow border-0 mb-4 bg-dark-subtle-panel">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-4 col-md-6">
+                    <label for="routerIp" class="form-label">Router IP</label>
+                    <input id="routerIp" class="form-control" placeholder="192.168.88.1" @bind="RouterIp" />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label for="username" class="form-label">Username</label>
+                    <input id="username" class="form-control" @bind="Username" />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label for="password" class="form-label">Password</label>
+                    <input id="password" type="password" class="form-control" @bind="Password" />
+                </div>
+                <div class="col-lg-2 col-md-6 d-grid">
+                    <button class="btn btn-primary" @onclick="RunIntelligentScanAsync" disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            <span>Scanning...</span>
+                        }
+                        else
+                        {
+                            <span>Scan</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger shadow-sm" role="alert">
+            @_errorMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_statusMessage))
+    {
+        <div class="alert alert-info shadow-sm" role="alert">
+            @_statusMessage
+        </div>
+    }
+
+    <div class="row g-3 mb-3">
+        <div class="col-xl-3 col-md-6">
+            <div class="card shadow border-0 bg-dark-subtle-panel">
+                <div class="card-body">
+                    <p class="text-secondary mb-2">Devices Found</p>
+                    <h4 class="mb-0">@Devices.Count</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card shadow border-0 bg-dark-subtle-panel">
+                <div class="card-body">
+                    <p class="text-secondary mb-2">Last Scan</p>
+                    <h6 class="mb-0">@(_lastScanAtUtc.HasValue ? _lastScanAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : "Not scanned")</h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card shadow border-0 bg-dark-subtle-panel">
+                <div class="card-body">
+                    <p class="text-secondary mb-2">Router</p>
+                    <h6 class="mb-0">@RouterIp</h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card shadow border-0 bg-dark-subtle-panel">
+                <div class="card-body">
+                    <p class="text-secondary mb-2">Status</p>
+                    <h6 class="mb-0">@(_isLoading ? "Loading..." : "Ready")</h6>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow border-0 mb-3 cctv-section verified-cctv-section">
+        <div class="card-header border-0">
+            <h5 class="mb-0">Verified CCTV Infrastructure</h5>
+        </div>
+        <div class="card-body">
+            @if (VerifiedVideoDevices.Count == 0)
+            {
+                <p class="mb-0 text-secondary">No video devices detected.</p>
+            }
+            else
+            {
+                <div class="row g-3">
+                    @foreach (var device in VerifiedVideoDevices)
+                    {
+                        <div class="col-xl-4 col-md-6" @key="@($"{device.IPAddress}-verified")">
+                            <div class="card border-0 shadow-sm cctv-device-card h-100">
+                                <div class="card-body">
+                                    <h6 class="mb-2">
+                                        <i class="bi bi-camera-video-fill me-2"></i>@device.Hostname
+                                    </h6>
+                                    <p class="mb-3 text-secondary">@device.IPAddress</p>
+                                    <a class="btn btn-outline-primary btn-sm"
+                                       href="@($"http://{device.IPAddress}")"
+                                       target="_blank"
+                                       rel="noopener noreferrer">
+                                        Open Web UI
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="card shadow border-0 bg-dark-subtle-panel">
+        <div class="card-header border-0 pt-3 px-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <h5 class="mb-0">Detected Devices</h5>
+                </div>
+                <div class="col-md-6">
+                    <input class="form-control" placeholder="Search by IP, Hostname, MAC..." @bind="_searchTerm" />
+                </div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>IP Address</th>
+                        <th>MAC Address</th>
+                        <th>Hostname</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredDevices.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-muted">No devices found. Connect to a router to load data.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var device in FilteredDevices)
+                        {
+                            <tr @key="device.IPAddress.ToString()">
+                                <td>@device.IPAddress</td>
+                                <td>@device.MACAddress</td>
+                                <td>
+                                    @if (device.IsVideoDevice)
+                                    {
+                                        <i class="bi bi-camera-video-fill me-1 text-info"></i>
+                                    }
+                                    @device.Hostname
+                                </td>
+                                <td>
+                                    @if (device.IsOnline)
+                                    {
+                                        <span class="badge text-bg-success">Online</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-secondary">Unknown</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<DeviceModel> Devices = [];
+    private DateTime? _lastScanAtUtc;
+    private bool _isLoading;
+    private string _searchTerm = string.Empty;
+    private string _statusMessage = string.Empty;
+    private string _errorMessage = string.Empty;
+
+    private string RouterIp { get; set; } = "192.168.88.1";
+    private string Username { get; set; } = "admin";
+    private string Password { get; set; } = string.Empty;
+
+    private List<DeviceModel> FilteredDevices =>
+        Devices
+            .Where(device =>
+                string.IsNullOrWhiteSpace(_searchTerm) ||
+                device.IPAddress.ToString().Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                device.Hostname.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                device.MACAddress.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(device => device.IPAddress.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private List<DeviceModel> VideoDevices =>
+        Devices
+            .Where(device => device.IsVideoDevice)
+            .OrderBy(device => device.IPAddress.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private List<DeviceModel> VerifiedVideoDevices =>
+        Devices
+            .Where(device => device.IsVideoDevice)
+            .OrderBy(device => device.IPAddress.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private async Task RunIntelligentScanAsync()
+    {
+        _isLoading = true;
+        _errorMessage = string.Empty;
+        _statusMessage = "Starting intelligent scan...";
+        Devices.Clear();
+        StateHasChanged();
+
+        var progress = new Progress<string>(message =>
+        {
+            _statusMessage = message;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            var result = await ScannerService.RunIntelligentScanAsync(RouterIp, Username, Password, progress);
+            Devices.Clear();
+            Devices.AddRange(result);
+            _lastScanAtUtc = DateTime.UtcNow;
+            _statusMessage = $"Intelligent scan completed. Loaded {result.Count} device records.";
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = string.Empty;
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

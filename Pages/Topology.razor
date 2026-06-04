@@ -1,0 +1,155 @@
+@page "/topology"
+@using NetScannerPro.Models
+@using NetScannerPro.Services
+@inject INetworkScannerService ScannerService
+@inject IJSRuntime JS
+
+<PageTitle>Network Topology</PageTitle>
+
+<div class="container-fluid py-4 dashboard">
+    <div class="mb-4">
+        <h2 class="mb-1">Network Topology</h2>
+        <p class="text-secondary mb-0">Generate an interactive map from live scanned devices.</p>
+    </div>
+
+    <div class="card shadow border-0 mb-4 bg-dark-subtle-panel">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-4 col-md-6">
+                    <label for="routerIpTopology" class="form-label">Router IP</label>
+                    <input id="routerIpTopology" class="form-control" @bind="RouterIp" />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label for="userTopology" class="form-label">Username</label>
+                    <input id="userTopology" class="form-control" @bind="Username" />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label for="passTopology" class="form-label">Password</label>
+                    <input id="passTopology" class="form-control" type="password" @bind="Password" />
+                </div>
+                <div class="col-lg-2 col-md-6 d-grid">
+                    <button class="btn btn-primary" @onclick="GenerateTopologyAsync" disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            <span>Generating...</span>
+                        }
+                        else
+                        {
+                            <span>Generate Topology</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_statusMessage))
+    {
+        <div class="alert alert-info shadow-sm" role="alert">@_statusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger shadow-sm" role="alert">@_errorMessage</div>
+    }
+
+    <div class="card shadow border-0 bg-dark-subtle-panel">
+        <div class="card-header border-0 pt-3 px-3">
+            <h5 class="mb-0">Interactive Topology</h5>
+        </div>
+        <div class="card-body">
+            <div id="topology-network" class="topology-canvas"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isLoading;
+    private string _statusMessage = string.Empty;
+    private string _errorMessage = string.Empty;
+
+    private string RouterIp { get; set; } = "192.168.88.1";
+    private string Username { get; set; } = "admin";
+    private string Password { get; set; } = string.Empty;
+
+    private async Task GenerateTopologyAsync()
+    {
+        _isLoading = true;
+        _errorMessage = string.Empty;
+        _statusMessage = "Running scan and building topology...";
+        StateHasChanged();
+
+        try
+        {
+            var devices = await ScannerService.RunIntelligentScanAsync(RouterIp, Username, Password);
+
+            var nodes = new List<object>
+            {
+                new
+                {
+                    id = "0",
+                    label = "MikroTik Router",
+                    shape = "database",
+                    color = new { background = "#3b82f6", border = "#1d4ed8" }
+                }
+            };
+
+            var edges = new List<object>();
+
+            foreach (var device in devices)
+            {
+                var id = device.IPAddress.ToString();
+                var label = string.IsNullOrWhiteSpace(device.Hostname) || device.Hostname.Equals("Unknown Device", StringComparison.OrdinalIgnoreCase)
+                    ? device.Vendor
+                    : device.Hostname;
+
+                nodes.Add(new
+                {
+                    id,
+                    label = string.IsNullOrWhiteSpace(label) ? id : $"{label}\n{id}",
+                    shape = "dot",
+                    color = GetNodeColor(device)
+                });
+
+                edges.Add(new
+                {
+                    from = "0",
+                    to = id
+                });
+            }
+
+            await JS.InvokeVoidAsync("drawNetworkTopology", "topology-network", nodes, edges);
+            _statusMessage = $"Topology generated for {devices.Count} devices.";
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = string.Empty;
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static object GetNodeColor(DeviceModel device)
+    {
+        if (device.Hostname.Contains("NVR", StringComparison.OrdinalIgnoreCase))
+        {
+            return new { background = "#2563eb", border = "#1e3a8a" };
+        }
+
+        if (device.IsVideoDevice)
+        {
+            return new { background = "#dc2626", border = "#7f1d1d" };
+        }
+
+        if (device.Vendor.Contains("Apple", StringComparison.OrdinalIgnoreCase))
+        {
+            return new { background = "#6b7280", border = "#374151" };
+        }
+
+        return new { background = "#10b981", border = "#065f46" };
+    }
+}
